@@ -1,0 +1,14 @@
+{
+  "name": "bluetooth-audio-receiver",
+  "version": "1.0.0",
+  "description": "Windows Bluetooth Audio Receiver using A2DP Sink",
+  "dependencies": [
+    {
+      "name": "imgui",
+      "features": ["dx11-binding", "win32-binding"]
+    },
+    "nlohmann-json",
+    "spdlog",
+    "fmt"
+  ]
+} 

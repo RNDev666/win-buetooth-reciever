@@ -1,0 +1,119 @@
+# Build directories
+build/
+Build/
+BUILD/
+out/
+cmake-build-*/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# vcpkg
+vcpkg_installed/
+.vcpkg-root
+
+# Visual Studio
+.vs/
+*.user
+*.aps
+*.pch
+*.vspscc
+*_i.c
+*_p.c
+*.ncb
+*.suo
+*.tlb
+*.tlh
+*.bak
+*.cache
+*.ilk
+*.log
+*.lib
+*.sbr
+*.sdf
+*.opensdf
+*.unsuccessfulbuild
+*.pdb
+*.exe
+*.dll
+*.exp
+*.idb
+*.obj
+*.tlog
+*.lastbuildstate
+*.iobj
+*.ipdb
+*.res
+*.rc.temp
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# Logs
+*.log
+logs/
+log/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+
+# Deployment artifacts (keep deployment structure but ignore binaries)
+deployment/bin/*.exe
+deployment/bin/*.dll
+deployment/bin/*.pdb
+deployment/bin/*.ilk
+deployment/bin/*.idb
+deployment/bin/*.lib
+deployment/bin/*.exp
+deployment/bin/logs/
+deployment/logs/
+
+# Keep deployment structure files
+!deployment/bin/.gitkeep
+!deployment/logs/.gitkeep
+
+# Configuration files that might contain sensitive data
+*.env
+.env.*
+config.json
+secrets.json
+
+# Package managers
+node_modules/
+packages/
+
+# Test results
+TestResults/ 
