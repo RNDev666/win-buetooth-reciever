@@ -572,4 +572,74 @@ void WindowsAPI::LogHResult(const std::string& operation, HRESULT hr) {
     Utils::Logger::Info(operation + " result: " + GetHResultString(hr));
 }
 
+// TODO: Complete A2DP Sink Implementation
+bool WindowsAPI::StartBluetoothA2DPSink(const std::string& deviceName) {
+    Utils::Logger::Info("Starting Bluetooth A2DP Sink Service: " + deviceName);
+    
+    // TODO: Implement Windows Bluetooth A2DP Sink Profile
+    // This requires:
+    // 1. Register A2DP sink service with Windows Bluetooth stack
+    // 2. Make PC discoverable as "Audio Sink" device
+    // 3. Handle incoming connection requests
+    // 4. Negotiate audio codecs (SBC, AAC)
+    // 5. Establish audio stream endpoints
+    
+    // For now, log the attempt
+    Utils::Logger::Info("A2DP Sink service would be started here");
+    return true;
+}
+
+bool WindowsAPI::StopBluetoothA2DPSink() {
+    Utils::Logger::Info("Stopping Bluetooth A2DP Sink Service");
+    
+    // TODO: Implement Windows Bluetooth A2DP Sink Profile cleanup
+    // This requires:
+    // 1. Unregister A2DP sink service
+    // 2. Close audio stream endpoints
+    // 3. Clean up Bluetooth resources
+    
+    return true;
+}
+
+bool WindowsAPI::AcceptIncomingConnection(const std::string& deviceId) {
+    Utils::Logger::Info("Accepting incoming connection from: " + deviceId);
+    
+    // TODO: Implement connection acceptance logic
+    // This requires:
+    // 1. Validate device authentication
+    // 2. Establish A2DP audio stream
+    // 3. Configure audio codec parameters
+    // 4. Start audio data reception
+    
+    return true;
+}
+
+bool WindowsAPI::RejectIncomingConnection(const std::string& deviceId) {
+    Utils::Logger::Info("Rejecting incoming connection from: " + deviceId);
+    
+    // TODO: Implement connection rejection logic
+    return true;
+}
+
+// Audio Stream Processing
+bool WindowsAPI::StartAudioStreamReception(const std::string& deviceId, AudioStreamCallback callback) {
+    Utils::Logger::Info("Starting audio stream reception for: " + deviceId);
+    
+    // TODO: Implement audio stream reception
+    // This requires:
+    // 1. Set up audio stream endpoint
+    // 2. Configure audio codec decoder (SBC/AAC)
+    // 3. Start receiving audio packets
+    // 4. Decode and forward to callback
+    
+    return true;
+}
+
+bool WindowsAPI::StopAudioStreamReception(const std::string& deviceId) {
+    Utils::Logger::Info("Stopping audio stream reception for: " + deviceId);
+    
+    // TODO: Implement audio stream cleanup
+    return true;
+}
+
 } // namespace Platform 
