@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <audioclient.h>
+#include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
 
 namespace BluetoothAudio {
 
@@ -289,14 +292,38 @@ void AudioMixer::ProcessMixing() {
     // Process and mix all audio sources
     MixAudioSources(m_mixBuffer.data(), m_mixingState.config.bufferSize);
     
-    // TODO: Output mixed audio to speakers via WASAPI
-    // This would require:
-    // 1. Get available buffer space from IAudioRenderClient
-    // 2. Write mixed audio data to WASAPI buffer
-    // 3. Handle buffer underruns and timing
-    // 4. Maintain low-latency audio pipeline
-    
-    // For now, mixed audio is processed but not output to speakers
+    // Output mixed audio to speakers via WASAPI
+    if (m_audioClient && m_renderClient) {
+        IAudioClient* audioClient = static_cast<IAudioClient*>(m_audioClient);
+        IAudioRenderClient* renderClient = static_cast<IAudioRenderClient*>(m_renderClient);
+        
+        // Get available buffer space
+        UINT32 numFramesPadding;
+        HRESULT hr = audioClient->GetCurrentPadding(&numFramesPadding);
+        if (SUCCEEDED(hr)) {
+            UINT32 bufferFrameCount = m_mixingState.config.bufferSize;
+            UINT32 availableFrames = bufferFrameCount - numFramesPadding;
+            
+            if (availableFrames > 0) {
+                // Get buffer from render client
+                BYTE* audioBuffer = nullptr;
+                hr = renderClient->GetBuffer(availableFrames, &audioBuffer);
+                if (SUCCEEDED(hr)) {
+                    // Convert float samples to 16-bit PCM
+                    INT16* outputBuffer = reinterpret_cast<INT16*>(audioBuffer);
+                    size_t samplesToWrite = std::min(static_cast<size_t>(availableFrames) * 2, m_mixBuffer.size());
+                    
+                    for (size_t i = 0; i < samplesToWrite; ++i) {
+                        float sample = std::clamp(m_mixBuffer[i], -1.0f, 1.0f);
+                        outputBuffer[i] = static_cast<INT16>(sample * 32767.0f);
+                    }
+                    
+                    // Release buffer
+                    renderClient->ReleaseBuffer(availableFrames, 0);
+                }
+            }
+        }
+    }
     
     // Update performance statistics
     auto endTime = std::chrono::steady_clock::now();
@@ -378,22 +405,140 @@ void AudioMixer::UpdateSourceStatistics(AudioSource& source) {
 bool AudioMixer::InitializeAudioOutput() {
     Utils::Logger::Info("Initializing WASAPI audio output...");
     
-    // TODO: Complete WASAPI Implementation
-    // This requires:
-    // 1. Get default audio device
-    // 2. Initialize IAudioClient with shared mode
-    // 3. Set up audio format (48kHz, 16-bit, stereo)
-    // 4. Get IAudioRenderClient for output
-    // 5. Start audio output stream
-    
-    // For now, use simplified initialization
-    Utils::Logger::Info("WASAPI audio output initialized (framework ready)");
-    return true;
+    try {
+        // Get default audio device
+        IMMDeviceEnumerator* deviceEnumerator = nullptr;
+        HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, 
+                                     __uuidof(IMMDeviceEnumerator), (void**)&deviceEnumerator);
+        if (FAILED(hr)) {
+            Utils::Logger::Error("Failed to create device enumerator");
+            return false;
+        }
+        
+        IMMDevice* defaultDevice = nullptr;
+        hr = deviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &defaultDevice);
+        deviceEnumerator->Release();
+        if (FAILED(hr)) {
+            Utils::Logger::Error("Failed to get default audio endpoint");
+            return false;
+        }
+        
+        // Initialize audio client
+        IAudioClient* audioClient = nullptr;
+        hr = defaultDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&audioClient);
+        defaultDevice->Release();
+        if (FAILED(hr)) {
+            Utils::Logger::Error("Failed to activate audio client");
+            return false;
+        }
+        
+        // Set up audio format (48kHz, 16-bit, stereo)
+        WAVEFORMATEX waveFormat = {};
+        waveFormat.wFormatTag = WAVE_FORMAT_PCM;
+        waveFormat.nChannels = 2;
+        waveFormat.nSamplesPerSec = 48000;
+        waveFormat.wBitsPerSample = 16;
+        waveFormat.nBlockAlign = waveFormat.nChannels * waveFormat.wBitsPerSample / 8;
+        waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
+        waveFormat.cbSize = 0;
+        
+        // Initialize audio client in shared mode
+        REFERENCE_TIME requestedDuration = 200000; // 20ms buffer
+        hr = audioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 
+                                    AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+                                    requestedDuration, 0, &waveFormat, nullptr);
+        if (FAILED(hr)) {
+            Utils::Logger::Error("Failed to initialize audio client");
+            audioClient->Release();
+            return false;
+        }
+        
+        // Get buffer size
+        UINT32 bufferFrameCount;
+        hr = audioClient->GetBufferSize(&bufferFrameCount);
+        if (FAILED(hr)) {
+            Utils::Logger::Error("Failed to get buffer size");
+            audioClient->Release();
+            return false;
+        }
+        
+        // Get render client
+        IAudioRenderClient* renderClient = nullptr;
+        hr = audioClient->GetService(__uuidof(IAudioRenderClient), (void**)&renderClient);
+        if (FAILED(hr)) {
+            Utils::Logger::Error("Failed to get render client");
+            audioClient->Release();
+            return false;
+        }
+        
+        // Create audio event
+        HANDLE audioEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        if (audioEvent == nullptr) {
+            Utils::Logger::Error("Failed to create audio event");
+            renderClient->Release();
+            audioClient->Release();
+            return false;
+        }
+        
+        // Set event handle
+        hr = audioClient->SetEventHandle(audioEvent);
+        if (FAILED(hr)) {
+            Utils::Logger::Error("Failed to set event handle");
+            CloseHandle(audioEvent);
+            renderClient->Release();
+            audioClient->Release();
+            return false;
+        }
+        
+        // Start audio client
+        hr = audioClient->Start();
+        if (FAILED(hr)) {
+            Utils::Logger::Error("Failed to start audio client");
+            CloseHandle(audioEvent);
+            renderClient->Release();
+            audioClient->Release();
+            return false;
+        }
+        
+        // Store audio client and render client
+        m_audioClient = audioClient;
+        m_renderClient = renderClient;
+        
+        // Update mixing state with actual audio format
+        m_mixingState.config.outputSampleRate = waveFormat.nSamplesPerSec;
+        m_mixingState.config.outputChannels = waveFormat.nChannels;
+        m_mixingState.config.bufferSize = bufferFrameCount;
+        
+        Utils::Logger::Info("WASAPI audio output initialized successfully");
+        Utils::Logger::Info("Sample Rate: " + std::to_string(waveFormat.nSamplesPerSec));
+        Utils::Logger::Info("Channels: " + std::to_string(waveFormat.nChannels));
+        Utils::Logger::Info("Buffer Size: " + std::to_string(bufferFrameCount));
+        
+        return true;
+    }
+    catch (const std::exception& e) {
+        Utils::Logger::Error("Exception in InitializeAudioOutput: " + std::string(e.what()));
+        return false;
+    }
 }
 
 void AudioMixer::CleanupAudioOutput() {
-    // TODO: Cleanup WASAPI resources
-    Utils::Logger::Info("Audio output cleaned up");
+    Utils::Logger::Info("Cleaning up WASAPI audio output...");
+    
+    if (m_audioClient) {
+        IAudioClient* audioClient = static_cast<IAudioClient*>(m_audioClient);
+        audioClient->Stop();
+        audioClient->Release();
+        m_audioClient = nullptr;
+    }
+    
+    if (m_renderClient) {
+        IAudioRenderClient* renderClient = static_cast<IAudioRenderClient*>(m_renderClient);
+        renderClient->Release();
+        m_renderClient = nullptr;
+    }
+    
+    Utils::Logger::Info("WASAPI audio output cleaned up");
 }
 
 void AudioMixer::NotifyMixingStateChanged() {

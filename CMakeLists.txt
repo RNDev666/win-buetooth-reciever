@@ -36,6 +36,11 @@ set(WINDOWS_LIBS
     d3d11
     dxgi
     d3dcompiler
+    # Bluetooth libraries
+    Bthprops
+    ws2_32
+    # Audio libraries
+    audioclient
 )
 
 # Set output directories
@@ -77,22 +82,32 @@ set(HEADERS
     src/Utils/Threading.h
 )
 
-# Create executable as a Windows application (not console)
+# Create main executable as a Windows application (not console)
 add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS})
+
+# Create test console application for A2DP Sink testing
+add_executable(TestA2DPSink test_a2dp_sink.cpp ${SOURCES} ${HEADERS})
 
 # Add application icon
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/resources/app.ico")
     target_sources(${PROJECT_NAME} PRIVATE resources/app.rc)
 endif()
 
-# Include directories
+# Include directories for main application
 target_include_directories(${PROJECT_NAME} PRIVATE 
     src
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-# Link libraries
-target_link_libraries(${PROJECT_NAME} PRIVATE 
+# Include directories for test application
+target_include_directories(TestA2DPSink PRIVATE 
+    src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+# Link libraries to main application
+target_link_libraries(${PROJECT_NAME} PRIVATE
     spdlog::spdlog
     fmt::fmt
     nlohmann_json::nlohmann_json
@@ -100,8 +115,17 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${WINDOWS_LIBS}
 )
 
+# Link libraries to test application
+target_link_libraries(TestA2DPSink PRIVATE
+    spdlog::spdlog
+    fmt::fmt
+    nlohmann_json::nlohmann_json
+    ${WINDOWS_LIBS}
+)
+
 # Compiler-specific options
 if(MSVC)
+    # Main application settings
     target_compile_options(${PROJECT_NAME} PRIVATE 
         /W4 
         /permissive-
@@ -117,12 +141,35 @@ if(MSVC)
         _WIN32_WINNT=0x0A00
     )
     
-    # Set subsystem to Windows
+    # Test application settings
+    target_compile_options(TestA2DPSink PRIVATE 
+        /W4 
+        /permissive-
+        /Zc:__cplusplus
+    )
+    target_compile_definitions(TestA2DPSink PRIVATE 
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+        WIN32_LEAN_AND_MEAN
+        UNICODE
+        _UNICODE
+        WINVER=0x0A00
+        _WIN32_WINNT=0x0A00
+    )
+    
+    # Set subsystem to Windows for main app, Console for test app
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/SUBSYSTEM:WINDOWS")
+    set_target_properties(TestA2DPSink PROPERTIES LINK_FLAGS "/SUBSYSTEM:CONSOLE")
 endif()
 
 # Set target properties
 set_target_properties(${PROJECT_NAME} PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+)
+
+set_target_properties(TestA2DPSink PROPERTIES
     CXX_STANDARD 20
     CXX_STANDARD_REQUIRED ON
     CXX_EXTENSIONS OFF

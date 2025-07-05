@@ -154,7 +154,10 @@ bool BluetoothSinkService::DisconnectSource(const std::string& sourceId) {
         StopAudioStream(sourceId);
     }
     
-    // TODO: Implement actual Bluetooth disconnection
+    // Disconnect using Windows API
+    if (!Platform::WindowsAPI::DisconnectBluetoothDevice(sourceId)) {
+        Utils::Logger::Warn("Failed to disconnect via Windows API: " + sourceId);
+    }
     Utils::Logger::Info("Bluetooth disconnection initiated for: " + sourceId);
     
     // Update source state
@@ -367,11 +370,39 @@ void BluetoothSinkService::ServiceLoop() {
 }
 
 void BluetoothSinkService::HandleIncomingConnections() {
-    // TODO: Implement actual Bluetooth connection handling
-    // This would poll for incoming A2DP connections and handle them
-    
-    // For now, this is a placeholder that could simulate incoming connections
-    // In a real implementation, this would interface with Windows Bluetooth APIs
+    // Poll for incoming A2DP connections using Windows Bluetooth APIs
+    try {
+        // Get connected audio sources from Windows API
+        auto connectedDevices = Platform::WindowsAPI::GetConnectedAudioSources();
+        
+        // Check for new connections
+        for (const auto& deviceId : connectedDevices) {
+            if (GetConnectedSource(deviceId) == nullptr) {
+                // New connection detected
+                Utils::Logger::Info("New A2DP connection detected: " + deviceId);
+                OnIncomingConnection(deviceId, "Unknown Device");
+            }
+        }
+        
+        // Check for disconnected devices
+        std::vector<std::string> toRemove;
+        {
+            std::lock_guard<std::mutex> lock(m_sourcesMutex);
+            for (const auto& source : m_connectedSources) {
+                if (std::find(connectedDevices.begin(), connectedDevices.end(), source.id) == connectedDevices.end()) {
+                    toRemove.push_back(source.id);
+                }
+            }
+        }
+        
+        for (const auto& deviceId : toRemove) {
+            Utils::Logger::Info("A2DP disconnection detected: " + deviceId);
+            OnConnectionLost(deviceId);
+        }
+    }
+    catch (const std::exception& e) {
+        Utils::Logger::Error("Exception in HandleIncomingConnections: " + std::string(e.what()));
+    }
 }
 
 void BluetoothSinkService::MonitorConnections() {
@@ -435,6 +466,38 @@ void BluetoothSinkService::OnConnectionEstablished(const std::string& sourceId) 
     
     m_totalConnections++;
     NotifyStatusChange("Connected to: " + source->name);
+}
+
+void BluetoothSinkService::OnConnectionLost(const std::string& sourceId) {
+    Utils::Logger::Info("Connection lost with: " + sourceId);
+    
+    auto source = GetConnectedSource(sourceId);
+    if (!source) return;
+    
+    // Stop audio stream if active
+    if (source->isStreaming) {
+        StopAudioStream(sourceId);
+    }
+    
+    // Update source state
+    source->state = Models::AudioSourceState::Disconnected;
+    source->isStreaming = false;
+    
+    // Remove from audio mixer if connected
+    if (m_audioMixer) {
+        m_audioMixer->RemoveAudioSource(sourceId);
+    }
+    
+    // Notify callbacks
+    if (m_sourceDisconnectedCallback) {
+        m_sourceDisconnectedCallback(*source);
+    }
+    
+    // Remove from connected sources
+    RemoveConnectedSource(sourceId);
+    
+    NotifyStatusChange("Connection lost with: " + source->name);
+    Utils::Logger::Info("Successfully handled connection loss for: " + sourceId);
 }
 
 void BluetoothSinkService::OnAudioDataReceived(const std::string& sourceId, const float* audioData, size_t sampleCount) {
@@ -505,15 +568,44 @@ void BluetoothSinkService::NotifyStatusChange(const std::string& status) {
 }
 
 bool BluetoothSinkService::StartBluetoothAdvertising() {
-    // TODO: Implement Windows Bluetooth service advertising
-    // This would make the PC discoverable as an A2DP sink
-    Utils::Logger::Info("Bluetooth advertising started (simplified implementation)");
+    Utils::Logger::Info("Starting Bluetooth A2DP advertising...");
+    
+    // Start the actual A2DP sink service using Windows API
+    if (!Platform::WindowsAPI::StartBluetoothA2DPSink(m_deviceName)) {
+        Utils::Logger::Error("Failed to start Windows Bluetooth A2DP Sink");
+        return false;
+    }
+    
+    // Set up audio stream callback to receive decoded audio data
+    Platform::WindowsAPI::SetAudioStreamCallback(
+        [this](const std::string& deviceId, const float* audioData, size_t sampleCount) {
+            OnAudioDataReceived(deviceId, audioData, sampleCount);
+        });
+    
+    // Set up connection callback to handle device connections/disconnections
+    Platform::WindowsAPI::SetBluetoothConnectionCallback(
+        [this](const std::string& deviceId, const std::string& deviceName, bool connected) {
+            if (connected) {
+                OnIncomingConnection(deviceId, deviceName);
+            } else {
+                OnConnectionLost(deviceId);
+            }
+        });
+    
+    Utils::Logger::Info("Bluetooth A2DP advertising started successfully");
     return true;
 }
 
 bool BluetoothSinkService::StopBluetoothAdvertising() {
-    // TODO: Stop Bluetooth advertising
-    Utils::Logger::Info("Bluetooth advertising stopped");
+    Utils::Logger::Info("Stopping Bluetooth A2DP advertising...");
+    
+    // Stop the actual A2DP sink service using Windows API
+    if (!Platform::WindowsAPI::StopBluetoothA2DPSink()) {
+        Utils::Logger::Error("Failed to stop Windows Bluetooth A2DP Sink");
+        return false;
+    }
+    
+    Utils::Logger::Info("Bluetooth A2DP advertising stopped successfully");
     return true;
 }
 
