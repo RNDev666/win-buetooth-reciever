@@ -203,3 +203,7 @@ For issues and questions:
 2. Review the troubleshooting section
 3. Enable debug logging for detailed information
 4. Create a new issue with logs and system information 
+
+If you find this useful, you can also support development on Ko-fi:
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/rndev666)
